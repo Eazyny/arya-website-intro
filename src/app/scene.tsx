@@ -100,7 +100,6 @@ export default function Scene() {
         audioRef.current.onended = null;
       }
 
-      // Close audio context (optional cleanup)
       if (audioCtxRef.current) {
         audioCtxRef.current.close().catch(() => {});
       }
@@ -113,30 +112,13 @@ export default function Scene() {
     };
   }, []);
 
-  const buttonStyle = useMemo(
-    () => ({
-      position: 'absolute' as const,
-      top: 16,
-      left: 16,
-      zIndex: 10,
-      padding: '10px 14px',
-      borderRadius: 10,
-      border: '1px solid #333',
-      background: '#111',
-      color: '#fff',
-      cursor: 'pointer',
-      fontSize: 14,
-    }),
-    []
-  );
-
   const startAnalyser = async () => {
     const el = audioRef.current;
     if (!el) return;
 
-    // Create/reuse AudioContext (must be resumed from user gesture)
     const AudioContextCtor =
-      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
 
     if (!audioCtxRef.current) {
       audioCtxRef.current = new AudioContextCtor();
@@ -145,7 +127,6 @@ export default function Scene() {
     const ctx = audioCtxRef.current;
     await ctx.resume();
 
-    // Only create nodes once per element
     if (!analyserRef.current) {
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 1024;
@@ -159,7 +140,6 @@ export default function Scene() {
       dataRef.current = new Uint8Array(analyser.frequencyBinCount);
     }
 
-    // Begin loop
     const tick = () => {
       const analyser = analyserRef.current;
       const data = dataRef.current;
@@ -167,7 +147,6 @@ export default function Scene() {
 
       analyser.getByteTimeDomainData(data);
 
-      // RMS volume (0..~1)
       let sum = 0;
       for (let i = 0; i < data.length; i++) {
         const v = (data[i] - 128) / 128;
@@ -175,13 +154,11 @@ export default function Scene() {
       }
       const rms = Math.sqrt(sum / data.length);
 
-      // Map RMS to mouth-open range (tweak if needed)
       const noiseFloor = 0.02;
       const gain = 6.5;
       const raw = Math.max(0, (rms - noiseFloor) * gain);
       const clamped = Math.min(1, raw);
 
-      // Smooth
       talkAmpRef.current = talkAmpRef.current * 0.7 + clamped * 0.3;
 
       rafRef.current = requestAnimationFrame(tick);
@@ -216,10 +193,7 @@ export default function Scene() {
     }
 
     try {
-      // setup analyser from the same click gesture
       await startAnalyser();
-
-      // start audio
       await el?.play();
     } catch (e) {
       console.warn('Audio/analyser start issue:', e);
@@ -235,12 +209,6 @@ export default function Scene() {
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       {!entered && <LoaderOverlay canEnter={canEnter} isFading={isFading} onEnter={enter} />}
-
-      {entered && (
-        <button style={buttonStyle} onClick={() => setIsTalking((v) => !v)}>
-          {isTalking ? 'Stop talking (Idle)' : 'Talk'}
-        </button>
-      )}
 
       <Canvas
         camera={{ position: [0, 1.4, 5], fov: 40 }}
