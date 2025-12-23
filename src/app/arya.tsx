@@ -7,6 +7,8 @@ import * as THREE from 'three';
 import type { GLTF } from 'three-stdlib';
 import { SkeletonUtils } from 'three-stdlib';
 
+const MODEL_URL = '/models/arya.glb';
+
 type Props = {
   isTalking: boolean;
   talkAmpRef?: React.RefObject<number>; // 0..1 amplitude from audio
@@ -20,7 +22,7 @@ type MorphTarget = {
 };
 
 export default function Arya({ isTalking, talkAmpRef }: Props) {
-  const gltf = useGLTF('/models/arya.glb') as GLTFWithAnims;
+  const gltf = useGLTF(MODEL_URL) as GLTFWithAnims;
 
   const preparedScene = useMemo(() => {
     const root = SkeletonUtils.clone(gltf.scene) as THREE.Object3D;
@@ -183,4 +185,6 @@ export default function Arya({ isTalking, talkAmpRef }: Props) {
   return <primitive object={preparedScene} />;
 }
 
-useGLTF.preload('/models/arya.glb');
+if (typeof window !== 'undefined') {
+  useGLTF.preload(MODEL_URL);
+}
