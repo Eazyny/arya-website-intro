@@ -2,7 +2,7 @@
 
 import { useAnimations, useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, type RefObject } from 'react';
 import * as THREE from 'three';
 import type { GLTF } from 'three-stdlib';
 import { SkeletonUtils } from 'three-stdlib';
@@ -11,7 +11,7 @@ const MODEL_URL = '/models/arya.glb';
 
 type Props = {
   isTalking: boolean;
-  talkAmpRef?: React.RefObject<number>; // 0..1 amplitude from audio
+  talkAmpRef?: RefObject<number>; // 0..1 amplitude from audio
 };
 
 type GLTFWithAnims = GLTF & { animations: THREE.AnimationClip[] };
@@ -82,11 +82,14 @@ export default function Arya({ isTalking, talkAmpRef }: Props) {
       if (!(obj instanceof THREE.Mesh)) return;
 
       const mesh = obj as THREE.Mesh;
-      const dict = (mesh as any).morphTargetDictionary as Record<string, number> | undefined;
-      const influences = (mesh as any).morphTargetInfluences as number[] | undefined;
+
+      // These are correctly typed on THREE.Mesh
+      const dict = mesh.morphTargetDictionary;
+      const influences = mesh.morphTargetInfluences;
+
       if (!dict || !influences) return;
 
-      // exact CC4 keys you showed
+      // exact CC4 key you showed
       if (dict['V_Lip_Open'] !== undefined) {
         lipTargets.push({ mesh, index: dict['V_Lip_Open'] });
       }
@@ -114,11 +117,13 @@ export default function Arya({ isTalking, talkAmpRef }: Props) {
 
     if (!loggedRef.current) {
       loggedRef.current = true;
+
       if (lipTargets.length === 0) {
         console.warn('Could not find V_Lip_Open on any mesh. (Check morph keys on face mesh.)');
       } else {
         console.log('Driving V_Lip_Open on:', lipTargets.map((t) => t.mesh.name));
       }
+
       if (jawTargets.length > 0) {
         console.log('Also driving Jaw_Open on:', jawTargets.map((t) => t.mesh.name));
       }
@@ -154,30 +159,27 @@ export default function Arya({ isTalking, talkAmpRef }: Props) {
   useFrame(() => {
     const amp = talkAmpRef?.current ?? 0;
 
-    // Small base so lips don't look sealed while she’s “talking”
     const base = isTalking ? 0.06 : 0;
-
-    // Main open amount
     const lipOpen = isTalking ? THREE.MathUtils.clamp(base + amp * 1.25, 0, 1) : 0;
-
-    // Jaw should be a bit less than lips, just to add realism (and not break face)
     const jawOpen = isTalking ? THREE.MathUtils.clamp(amp * 0.6, 0, 1) : 0;
 
     // Apply V_Lip_Open
     for (const t of lipOpenRef.current) {
-      const influences = (t.mesh as any).morphTargetInfluences as number[] | undefined;
+      const influences = t.mesh.morphTargetInfluences;
       if (!influences) continue;
 
       const current = influences[t.index] ?? 0;
+      // eslint-disable-next-line react-hooks/immutability
       influences[t.index] = THREE.MathUtils.lerp(current, lipOpen, 0.35);
     }
 
     // Apply Jaw_Open if found
     for (const t of jawOpenRef.current) {
-      const influences = (t.mesh as any).morphTargetInfluences as number[] | undefined;
+      const influences = t.mesh.morphTargetInfluences;
       if (!influences) continue;
 
       const current = influences[t.index] ?? 0;
+      // eslint-disable-next-line react-hooks/immutability
       influences[t.index] = THREE.MathUtils.lerp(current, jawOpen, 0.25);
     }
   });

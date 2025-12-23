@@ -39,6 +39,7 @@ function LoaderOverlay({
 
   return (
     <div style={overlayStyle} onClick={canEnter && !isFading ? onEnter : undefined}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/loader.gif"
         alt="Loading"
@@ -82,7 +83,10 @@ export default function Scene() {
   // WebAudio analyser refs
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const dataRef = useRef<Uint8Array | null>(null);
+
+  // Fix TS mismatch for getByteTimeDomainData()
+  const dataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+
   const rafRef = useRef<number | null>(null);
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
 
@@ -137,6 +141,8 @@ export default function Scene() {
 
       analyserRef.current = analyser;
       sourceRef.current = source;
+
+      // This constructor returns Uint8Array<ArrayBuffer>
       dataRef.current = new Uint8Array(analyser.frequencyBinCount);
     }
 
@@ -178,8 +184,6 @@ export default function Scene() {
     if (!canEnter || isFading || entered) return;
 
     setIsFading(true);
-
-    // make her talk during the welcome message
     setIsTalking(true);
 
     const el = audioRef.current;
