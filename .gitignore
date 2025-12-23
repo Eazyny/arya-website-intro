@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Large local 3D assets (keep out of git)
+public/models/*.glb
+public/models/*.gltf
+public/models/*.bin
+public/models/**
+
+# Local env
+.env.local
