@@ -142,6 +142,8 @@ export default function Scene() {
       {!entered && <LoaderOverlay canEnter={canEnter} isFading={isFading} onEnter={enter} />}
 
       <Canvas
+        shadows
+        dpr={[1, 2]}
         camera={{ position: [0, 1.4, 5], fov: 40 }}
         onCreated={({ camera }) => {
           camera.lookAt(0, 1.25, 0);
@@ -149,8 +151,35 @@ export default function Scene() {
       >
         {/* Arya + ready gate: this Suspense resolves when the GLB resolves */}
         <Suspense fallback={null}>
-          <ambientLight intensity={1} />
-          <directionalLight position={[3, 5, 3]} intensity={0.5} />
+          {/* Lighting upgrade (studio-ish 3-point) */}
+          <ambientLight intensity={0.28} />
+
+          {/* Key light (main) */}
+          <spotLight
+            position={[2.6, 4.8, 3.6]}
+            intensity={1.35}
+            angle={0.38}
+            penumbra={0.9}
+            decay={2}
+            distance={25}
+            castShadow
+            shadow-mapSize-width={2048}
+            shadow-mapSize-height={2048}
+            shadow-bias={-0.00015}
+          />
+
+          {/* Fill light (soft) */}
+          <spotLight
+            position={[-3.2, 3.6, 4.4]}
+            intensity={0.55}
+            angle={0.6}
+            penumbra={1}
+            decay={2}
+            distance={25}
+          />
+
+          {/* Rim light (separation) */}
+          <directionalLight position={[0.2, 2.6, -4.6]} intensity={0.75} />
 
           <Arya isTalking={isTalking} />
 
