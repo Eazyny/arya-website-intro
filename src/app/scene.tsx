@@ -11,10 +11,12 @@ function LoaderOverlay({
   canEnter,
   isFading,
   onEnter,
+  onSfx,
 }: {
   canEnter: boolean;
   isFading: boolean;
   onEnter: () => void;
+  onSfx: () => void;
 }) {
   const { progress } = useProgress();
 
@@ -40,7 +42,11 @@ function LoaderOverlay({
   );
 
   return (
-    <div style={overlayStyle} onClick={canEnter && !isFading ? onEnter : undefined}>
+    <div
+      style={overlayStyle}
+      onPointerDown={canEnter && !isFading ? onSfx : undefined}
+      onClick={canEnter && !isFading ? onEnter : undefined}
+    >
       <Image
         src="/loader.gif"
         alt="Loading"
@@ -106,12 +112,18 @@ export default function Scene() {
   const [canEnter, setCanEnter] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const enterSfxRef = useRef<HTMLAudioElement | null>(null);
   const fadeTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     audioRef.current = new Audio('/welcomemessage.mp3');
     audioRef.current.preload = 'auto';
     audioRef.current.volume = 0.9;
+
+    // Optional enter SFX (add public/enter.mp3). If missing, it will just fail silently.
+    enterSfxRef.current = new Audio('/enter.mp3');
+    enterSfxRef.current.preload = 'auto';
+    enterSfxRef.current.volume = 0.35;
 
     return () => {
       if (fadeTimerRef.current) {
@@ -124,8 +136,24 @@ export default function Scene() {
         audioRef.current.onended = null;
       }
       audioRef.current = null;
+
+      if (enterSfxRef.current) {
+        enterSfxRef.current.pause();
+      }
+      enterSfxRef.current = null;
     };
   }, []);
+
+  const playEnterSfx = () => {
+    try {
+      const sfx = enterSfxRef.current;
+      if (!sfx) return;
+      sfx.currentTime = 0;
+      void sfx.play();
+    } catch {
+      // ignore
+    }
+  };
 
   const enter = async () => {
     if (!canEnter || isFading || entered) return;
@@ -165,7 +193,14 @@ export default function Scene() {
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-      {!entered && <LoaderOverlay canEnter={canEnter} isFading={isFading} onEnter={enter} />}
+      {!entered && (
+        <LoaderOverlay
+          canEnter={canEnter}
+          isFading={isFading}
+          onEnter={enter}
+          onSfx={playEnterSfx}
+        />
+      )}
 
       <Canvas
         shadows
