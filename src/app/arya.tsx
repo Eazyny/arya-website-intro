@@ -1,7 +1,7 @@
 'use client';
 
 import { useAnimations, useGLTF } from '@react-three/drei';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { GLTF } from 'three-stdlib';
 import { SkeletonUtils } from 'three-stdlib';
@@ -13,6 +13,8 @@ type GLTFWithAnims = GLTF & { animations: THREE.AnimationClip[] };
 
 export default function Arya({ isTalking }: Props) {
   const gltf = useGLTF(MODEL_URL) as GLTFWithAnims;
+
+  const idleTimerRef = useRef<number | null>(null);
 
   const preparedScene = useMemo(() => {
     const root = SkeletonUtils.clone(gltf.scene) as THREE.Object3D;
@@ -61,52 +63,89 @@ export default function Arya({ isTalking }: Props) {
 
   // Start idle once actions exist
   useEffect(() => {
-    const idle = actions?.['IdleAnim'];
+    if (!actions) return;
+
+    const idle = actions['IdleAnim'];
     if (!idle) return;
 
     idle.reset();
     idle.setLoop(THREE.LoopRepeat, Infinity);
     idle.fadeIn(0.2).play();
+
+    return () => {
+      if (idleTimerRef.current) {
+        window.clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+    };
   }, [actions]);
 
-  // Toggle idle <-> talk (talk contains baked lip sync now)
-useEffect(() => {
-  if (!actions) return;
+  // Toggle idle <-> talk using crossfades (prevents A-pose flash)
+  useEffect(() => {
+    if (!actions) return;
 
-  const idle = actions['IdleAnim'];
-  const talk = actions['TalkAnim'];
+    const idle = actions['IdleAnim'];
+    const talk = actions['TalkAnim'];
 
-  if (!idle || !talk) {
-    console.warn('Missing actions. Found:', Object.keys(actions));
-    return;
-  }
+    if (!idle || !talk) {
+      console.warn('Missing actions. Found:', Object.keys(actions));
+      return;
+    }
 
-  // Tune these to taste
-  const TALK_IN = 0.25;     // talk comes in fairly quick
-  const TALK_OUT = 0.45;    // talk fades out slower (prevents snap)
-  const IDLE_IN = 0.65;     // idle fades in slower (more natural)
-  const IDLE_OUT = 0.25;    // idle can fade out quicker
-  const IDLE_DELAY_MS = 250; // tiny pause before idle returns (optional but nice)
+    // Clear any pending "return to idle"
+    if (idleTimerRef.current) {
+      window.clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
 
-  if (isTalking) {
-    // Start talk from frame 0 so it lines up with audio start
-    talk.reset();
-    talk.setLoop(THREE.LoopRepeat, Infinity);
-    talk.fadeIn(TALK_IN).play();
+    // Tune these to taste
+    const TALK_IN = 0.25;        // idle -> talk
+    const BACK_FADE = 0.65;      // talk -> idle
+    const IDLE_DELAY_MS = 250;   // pause before returning to idle
 
-    idle.fadeOut(IDLE_OUT);
-  } else {
-    // Let the last mouth pose "settle" before easing back to idle
-    window.setTimeout(() => {
-      idle.reset();
-      idle.setLoop(THREE.LoopRepeat, Infinity);
-      idle.fadeIn(IDLE_IN).play();
+    if (isTalking) {
+      // Ensure idle is running so crossfade has something to blend from
+      if (!idle.isRunning()) {
+        idle.reset();
+        idle.setLoop(THREE.LoopRepeat, Infinity);
+        idle.play();
+      }
 
-      talk.fadeOut(TALK_OUT);
-    }, IDLE_DELAY_MS);
-  }
-}, [isTalking, actions]);
+      // Start talk from frame 0 so it lines up with audio start
+      talk.reset();
+      talk.setLoop(THREE.LoopRepeat, Infinity);
+      talk.play();
 
+      // Crossfade Idle -> Talk (no dead gap)
+      talk.crossFadeFrom(idle, TALK_IN, false);
+    } else {
+      // Keep talk weighted during the delay to avoid A-pose flash.
+      // Then crossfade Talk -> Idle.
+      idleTimerRef.current = window.setTimeout(() => {
+        // Ensure talk is still running for the blend
+        if (!talk.isRunning()) {
+          talk.reset();
+          talk.setLoop(THREE.LoopRepeat, Infinity);
+          talk.play();
+        }
+
+        idle.reset();
+        idle.setLoop(THREE.LoopRepeat, Infinity);
+        idle.play();
+
+        idle.crossFadeFrom(talk, BACK_FADE, false);
+
+        idleTimerRef.current = null;
+      }, IDLE_DELAY_MS);
+    }
+
+    return () => {
+      if (idleTimerRef.current) {
+        window.clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+    };
+  }, [isTalking, actions]);
 
   return <primitive object={preparedScene} />;
 }

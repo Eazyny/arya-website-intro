@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { Canvas } from '@react-three/fiber';
 import { Environment, useProgress } from '@react-three/drei';
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Arya from './arya';
 
 function LoaderOverlay({
@@ -80,6 +80,7 @@ export default function Scene() {
   const [canEnter, setCanEnter] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const fadeTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     audioRef.current = new Audio('/welcomemessage.mp3');
@@ -87,6 +88,11 @@ export default function Scene() {
     audioRef.current.volume = 0.9;
 
     return () => {
+      if (fadeTimerRef.current) {
+        window.clearTimeout(fadeTimerRef.current);
+        fadeTimerRef.current = null;
+      }
+
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.onended = null;
@@ -120,11 +126,16 @@ export default function Scene() {
       }
     }
 
-    // After fade, reveal the scene
-    window.setTimeout(() => {
+    // After fade, hide overlay
+    fadeTimerRef.current = window.setTimeout(() => {
       setEntered(true);
+      fadeTimerRef.current = null;
     }, 450);
   };
+
+  const handleReady = useCallback(() => {
+    setCanEnter(true);
+  }, []);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -136,15 +147,19 @@ export default function Scene() {
           camera.lookAt(0, 1.25, 0);
         }}
       >
+        {/* Arya + ready gate: this Suspense resolves when the GLB resolves */}
         <Suspense fallback={null}>
           <ambientLight intensity={1} />
           <directionalLight position={[3, 5, 3]} intensity={0.5} />
 
           <Arya isTalking={isTalking} />
 
-          <Environment preset="city" />
+          <ReadyFlag onReady={handleReady} />
+        </Suspense>
 
-          <ReadyFlag onReady={() => setCanEnter(true)} />
+        {/* Environment loads separately so it doesn't block "Tap to Enter" */}
+        <Suspense fallback={null}>
+          <Environment preset="city" />
         </Suspense>
       </Canvas>
     </div>
@@ -152,7 +167,11 @@ export default function Scene() {
 }
 
 function ReadyFlag({ onReady }: { onReady: () => void }) {
+  const ranRef = useRef(false);
+
   useEffect(() => {
+    if (ranRef.current) return;
+    ranRef.current = true;
     onReady();
   }, [onReady]);
 
