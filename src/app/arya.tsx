@@ -1,33 +1,23 @@
 'use client';
 
 import { useAnimations, useGLTF } from '@react-three/drei';
-import { useFrame } from '@react-three/fiber';
-import { useEffect, useMemo, useRef, type RefObject } from 'react';
+import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import type { GLTF } from 'three-stdlib';
 import { SkeletonUtils } from 'three-stdlib';
 
 const MODEL_URL = '/models/arya.glb';
 
-type Props = {
-  isTalking: boolean;
-  talkAmpRef?: RefObject<number>; // 0..1 amplitude from audio
-};
-
+type Props = { isTalking: boolean };
 type GLTFWithAnims = GLTF & { animations: THREE.AnimationClip[] };
 
-type MorphTarget = {
-  mesh: THREE.Mesh;
-  index: number;
-};
-
-export default function Arya({ isTalking, talkAmpRef }: Props) {
+export default function Arya({ isTalking }: Props) {
   const gltf = useGLTF(MODEL_URL) as GLTFWithAnims;
 
   const preparedScene = useMemo(() => {
     const root = SkeletonUtils.clone(gltf.scene) as THREE.Object3D;
 
-    // Shoes fix + hair stability (your current working setup)
+    // Shoes fix + hair stability (your working setup)
     root.traverse((obj) => {
       if (!(obj instanceof THREE.Mesh)) return;
 
@@ -69,74 +59,17 @@ export default function Arya({ isTalking, talkAmpRef }: Props) {
 
   const { actions } = useAnimations(gltf.animations, preparedScene);
 
-  // Find morph targets once
-  const lipOpenRef = useRef<MorphTarget[]>([]);
-  const jawOpenRef = useRef<MorphTarget[]>([]);
-  const loggedRef = useRef(false);
-
-  useEffect(() => {
-    const lipTargets: MorphTarget[] = [];
-    const jawTargets: MorphTarget[] = [];
-
-    preparedScene.traverse((obj) => {
-      if (!(obj instanceof THREE.Mesh)) return;
-
-      const mesh = obj as THREE.Mesh;
-
-      // These are correctly typed on THREE.Mesh
-      const dict = mesh.morphTargetDictionary;
-      const influences = mesh.morphTargetInfluences;
-
-      if (!dict || !influences) return;
-
-      // exact CC4 key you showed
-      if (dict['V_Lip_Open'] !== undefined) {
-        lipTargets.push({ mesh, index: dict['V_Lip_Open'] });
-      }
-
-      // optional helper if present in your model
-      const jawKey =
-        dict['Jaw_Open'] !== undefined
-          ? 'Jaw_Open'
-          : dict['jawOpen'] !== undefined
-          ? 'jawOpen'
-          : undefined;
-
-      if (jawKey) {
-        jawTargets.push({ mesh, index: dict[jawKey] });
-      }
-
-      // one-time debug if needed
-      if (!loggedRef.current && Object.keys(dict).length > 0) {
-        // console.log(mesh.name, Object.keys(dict));
-      }
-    });
-
-    lipOpenRef.current = lipTargets;
-    jawOpenRef.current = jawTargets;
-
-    if (!loggedRef.current) {
-      loggedRef.current = true;
-
-      if (lipTargets.length === 0) {
-        console.warn('Could not find V_Lip_Open on any mesh. (Check morph keys on face mesh.)');
-      } else {
-        console.log('Driving V_Lip_Open on:', lipTargets.map((t) => t.mesh.name));
-      }
-
-      if (jawTargets.length > 0) {
-        console.log('Also driving Jaw_Open on:', jawTargets.map((t) => t.mesh.name));
-      }
-    }
-  }, [preparedScene]);
-
-  // Start idle
+  // Start idle once actions exist
   useEffect(() => {
     const idle = actions?.['IdleAnim'];
-    if (idle) idle.reset().fadeIn(0.2).play();
+    if (!idle) return;
+
+    idle.reset();
+    idle.setLoop(THREE.LoopRepeat, Infinity);
+    idle.fadeIn(0.2).play();
   }, [actions]);
 
-  // Toggle Idle <-> Talk
+  // Toggle idle <-> talk (talk contains baked lip sync now)
   useEffect(() => {
     if (!actions) return;
 
@@ -148,45 +81,21 @@ export default function Arya({ isTalking, talkAmpRef }: Props) {
       return;
     }
 
-    const from = isTalking ? idle : talk;
-    const to = isTalking ? talk : idle;
-
-    to.reset().fadeIn(0.2).play();
-    from.fadeOut(0.2);
+    if (isTalking) {
+      // Start talk from frame 0 so it lines up with audio start
+      talk.reset();
+      talk.setLoop(THREE.LoopRepeat, Infinity); // or LoopOnce if your talk clip is exact length
+      talk.fadeIn(0.15).play();
+      idle.fadeOut(0.15);
+    } else {
+      idle.reset();
+      idle.setLoop(THREE.LoopRepeat, Infinity);
+      idle.fadeIn(0.2).play();
+      talk.fadeOut(0.2);
+    }
   }, [isTalking, actions]);
-
-  // Drive lip open + optional jaw open from audio
-  useFrame(() => {
-    const amp = talkAmpRef?.current ?? 0;
-
-    const base = isTalking ? 0.06 : 0;
-    const lipOpen = isTalking ? THREE.MathUtils.clamp(base + amp * 1.25, 0, 1) : 0;
-    const jawOpen = isTalking ? THREE.MathUtils.clamp(amp * 0.6, 0, 1) : 0;
-
-    // Apply V_Lip_Open
-    for (const t of lipOpenRef.current) {
-      const influences = t.mesh.morphTargetInfluences;
-      if (!influences) continue;
-
-      const current = influences[t.index] ?? 0;
-      // eslint-disable-next-line react-hooks/immutability
-      influences[t.index] = THREE.MathUtils.lerp(current, lipOpen, 0.35);
-    }
-
-    // Apply Jaw_Open if found
-    for (const t of jawOpenRef.current) {
-      const influences = t.mesh.morphTargetInfluences;
-      if (!influences) continue;
-
-      const current = influences[t.index] ?? 0;
-      // eslint-disable-next-line react-hooks/immutability
-      influences[t.index] = THREE.MathUtils.lerp(current, jawOpen, 0.25);
-    }
-  });
 
   return <primitive object={preparedScene} />;
 }
 
-if (typeof window !== 'undefined') {
-  useGLTF.preload(MODEL_URL);
-}
+useGLTF.preload(MODEL_URL);

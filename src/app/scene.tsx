@@ -39,7 +39,6 @@ function LoaderOverlay({
 
   return (
     <div style={overlayStyle} onClick={canEnter && !isFading ? onEnter : undefined}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/loader.gif"
         alt="Loading"
@@ -77,134 +76,46 @@ export default function Scene() {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // This ref will be read by Arya.tsx to move her mouth (0..1)
-  const talkAmpRef = useRef(0);
-
-  // WebAudio analyser refs
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-
-  // Fix TS mismatch for getByteTimeDomainData()
-  const dataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
-
-  const rafRef = useRef<number | null>(null);
-  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
-
   useEffect(() => {
     audioRef.current = new Audio('/welcomemessage.mp3');
     audioRef.current.preload = 'auto';
     audioRef.current.volume = 0.9;
 
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.onended = null;
       }
-
-      if (audioCtxRef.current) {
-        audioCtxRef.current.close().catch(() => {});
-      }
-
       audioRef.current = null;
-      analyserRef.current = null;
-      dataRef.current = null;
-      sourceRef.current = null;
-      audioCtxRef.current = null;
     };
   }, []);
-
-  const startAnalyser = async () => {
-    const el = audioRef.current;
-    if (!el) return;
-
-    const AudioContextCtor =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new AudioContextCtor();
-    }
-
-    const ctx = audioCtxRef.current;
-    await ctx.resume();
-
-    if (!analyserRef.current) {
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 1024;
-
-      const source = ctx.createMediaElementSource(el);
-      source.connect(analyser);
-      analyser.connect(ctx.destination);
-
-      analyserRef.current = analyser;
-      sourceRef.current = source;
-
-      // This constructor returns Uint8Array<ArrayBuffer>
-      dataRef.current = new Uint8Array(analyser.frequencyBinCount);
-    }
-
-    const tick = () => {
-      const analyser = analyserRef.current;
-      const data = dataRef.current;
-      if (!analyser || !data) return;
-
-      analyser.getByteTimeDomainData(data);
-
-      let sum = 0;
-      for (let i = 0; i < data.length; i++) {
-        const v = (data[i] - 128) / 128;
-        sum += v * v;
-      }
-      const rms = Math.sqrt(sum / data.length);
-
-      const noiseFloor = 0.02;
-      const gain = 6.5;
-      const raw = Math.max(0, (rms - noiseFloor) * gain);
-      const clamped = Math.min(1, raw);
-
-      talkAmpRef.current = talkAmpRef.current * 0.7 + clamped * 0.3;
-
-      rafRef.current = requestAnimationFrame(tick);
-    };
-
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(tick);
-  };
-
-  const stopAnalyser = () => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
-    talkAmpRef.current = 0;
-  };
 
   const enter = async () => {
     if (!canEnter || isFading || entered) return;
 
     setIsFading(true);
-    setIsTalking(true);
 
     const el = audioRef.current;
     if (el) {
       el.currentTime = 0;
 
+      // Talk during the welcome message
+      setIsTalking(true);
+
       el.onended = () => {
         setIsTalking(false);
-        stopAnalyser();
       };
+
+      // play audio off the click so autoplay works
+      try {
+        await el.play();
+      } catch (e) {
+        console.warn('Audio play blocked (rare after click):', e);
+        setIsTalking(false);
+      }
     }
 
-    try {
-      await startAnalyser();
-      await el?.play();
-    } catch (e) {
-      console.warn('Audio/analyser start issue:', e);
-      setIsTalking(false);
-      stopAnalyser();
-    }
-
+    // After fade, reveal the scene
     window.setTimeout(() => {
       setEntered(true);
     }, 450);
@@ -224,7 +135,7 @@ export default function Scene() {
           <ambientLight intensity={1} />
           <directionalLight position={[3, 5, 3]} intensity={0.5} />
 
-          <Arya isTalking={isTalking} talkAmpRef={talkAmpRef} />
+          <Arya isTalking={isTalking} />
 
           <Environment preset="city" />
 
