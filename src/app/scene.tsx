@@ -1,9 +1,10 @@
 'use client';
 
 import Image from 'next/image';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { Environment, useProgress } from '@react-three/drei';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as THREE from 'three';
 import Arya from './arya';
 
 function LoaderOverlay({
@@ -69,6 +70,31 @@ function LoaderOverlay({
       )}
     </div>
   );
+}
+
+/**
+ * Tiny parallax / camera drift for a premium feel.
+ * Super subtle: no orbit controls, always looks at Arya.
+ */
+function CameraDrift() {
+  useFrame(({ camera, clock }) => {
+    const t = clock.getElapsedTime();
+
+    // Base camera (matches your original)
+    const base = new THREE.Vector3(0, 1.4, 5);
+
+    // Very small drift
+    const drift = new THREE.Vector3(
+      Math.sin(t * 0.35) * 0.14,
+      Math.sin(t * 0.22) * 0.08,
+      Math.cos(t * 0.28) * 0.18
+    );
+
+    camera.position.copy(base).add(drift);
+    camera.lookAt(0, 1.25, 0);
+  });
+
+  return null;
 }
 
 export default function Scene() {
@@ -149,6 +175,9 @@ export default function Scene() {
           camera.lookAt(0, 1.25, 0);
         }}
       >
+        {/* Tiny parallax */}
+        <CameraDrift />
+
         {/* Arya + ready gate: this Suspense resolves when the GLB resolves */}
         <Suspense fallback={null}>
           {/* Lighting upgrade (studio-ish 3-point) */}
@@ -178,8 +207,11 @@ export default function Scene() {
             distance={25}
           />
 
-          {/* Rim light (separation) */}
-          <directionalLight position={[0.2, 2.6, -4.6]} intensity={0.75} />
+          {/* Rim light (separation) — softened a touch */}
+          <directionalLight position={[0.2, 2.6, -4.6]} intensity={0.65} />
+
+          {/* Optional: tiny overhead kicker to help hair separation (VERY subtle) */}
+          <directionalLight position={[0, 6, 2]} intensity={0.12} />
 
           <Arya isTalking={isTalking} />
 
