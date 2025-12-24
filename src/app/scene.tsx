@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { Canvas } from '@react-three/fiber';
 import { Environment, useProgress } from '@react-three/drei';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
@@ -39,9 +40,13 @@ function LoaderOverlay({
 
   return (
     <div style={overlayStyle} onClick={canEnter && !isFading ? onEnter : undefined}>
-      <img
+      <Image
         src="/loader.gif"
         alt="Loading"
+        width={600}
+        height={600}
+        unoptimized
+        priority
         style={{
           height: 'auto',
           width: 'auto',
