@@ -70,30 +70,43 @@ export default function Arya({ isTalking }: Props) {
   }, [actions]);
 
   // Toggle idle <-> talk (talk contains baked lip sync now)
-  useEffect(() => {
-    if (!actions) return;
+useEffect(() => {
+  if (!actions) return;
 
-    const idle = actions['IdleAnim'];
-    const talk = actions['TalkAnim'];
+  const idle = actions['IdleAnim'];
+  const talk = actions['TalkAnim'];
 
-    if (!idle || !talk) {
-      console.warn('Missing actions. Found:', Object.keys(actions));
-      return;
-    }
+  if (!idle || !talk) {
+    console.warn('Missing actions. Found:', Object.keys(actions));
+    return;
+  }
 
-    if (isTalking) {
-      // Start talk from frame 0 so it lines up with audio start
-      talk.reset();
-      talk.setLoop(THREE.LoopRepeat, Infinity); // or LoopOnce if your talk clip is exact length
-      talk.fadeIn(0.15).play();
-      idle.fadeOut(0.15);
-    } else {
+  // Tune these to taste
+  const TALK_IN = 0.25;     // talk comes in fairly quick
+  const TALK_OUT = 0.45;    // talk fades out slower (prevents snap)
+  const IDLE_IN = 0.65;     // idle fades in slower (more natural)
+  const IDLE_OUT = 0.25;    // idle can fade out quicker
+  const IDLE_DELAY_MS = 250; // tiny pause before idle returns (optional but nice)
+
+  if (isTalking) {
+    // Start talk from frame 0 so it lines up with audio start
+    talk.reset();
+    talk.setLoop(THREE.LoopRepeat, Infinity);
+    talk.fadeIn(TALK_IN).play();
+
+    idle.fadeOut(IDLE_OUT);
+  } else {
+    // Let the last mouth pose "settle" before easing back to idle
+    window.setTimeout(() => {
       idle.reset();
       idle.setLoop(THREE.LoopRepeat, Infinity);
-      idle.fadeIn(0.2).play();
-      talk.fadeOut(0.2);
-    }
-  }, [isTalking, actions]);
+      idle.fadeIn(IDLE_IN).play();
+
+      talk.fadeOut(TALK_OUT);
+    }, IDLE_DELAY_MS);
+  }
+}, [isTalking, actions]);
+
 
   return <primitive object={preparedScene} />;
 }
